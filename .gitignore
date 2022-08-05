@@ -1,0 +1,6 @@
+**/__pycache__
+/data/yuv_videos/*.yuv
+/data/content_encoded_videos/*.mp4
+/data/original_videos/*.mp4
+/logs/*.txt
+/save/*.pth
