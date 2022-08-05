@@ -1,0 +1,5 @@
+pyyaml
+munch
+numpy
+opencv-python
+torchmetrics

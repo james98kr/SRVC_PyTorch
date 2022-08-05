@@ -5,7 +5,7 @@ save_path: /home/james/srvc/save/
 log_path: /home/james/srvc/logs/
 hr_size: 1920,1080
 lr_size: 480,270
-crf: 35
+crf: 10
 start_time: 0
 end_time: 600
 segment_length: 5
