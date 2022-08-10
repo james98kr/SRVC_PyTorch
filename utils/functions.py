@@ -45,3 +45,28 @@ def find_train_mask(before, after, update_frac):
     threshold = np.percentile(changes, 100 * (1 - update_frac))
     train_mask = {v: torch.abs(after[v] - before[v]) > threshold for v in before.keys()}
     return train_mask
+
+
+def get_update_parameters(before, after, update_frac):
+    changes = [np.reshape(np.abs(after[v].cpu().numpy() - before[v].cpu().numpy()), (-1,)) for v in before.keys()]
+    changes = np.concatenate(changes, axis=0)
+    threshold = np.percentile(changes, 100 * (1 - update_frac))
+    update_params = {}
+    for v in before.keys():
+        diff = torch.abs(after[v] - before[v])
+        if len(diff.shape) == 4:
+            a, b, c, d = torch.where(diff > threshold)
+            a = a.cpu().detach().numpy().tolist()
+            b = b.cpu().detach().numpy().tolist()
+            c = c.cpu().detach().numpy().tolist()
+            d = d.cpu().detach().numpy().tolist()
+            coords = list(zip(a, b, c, d))
+            actual_values = diff[a, b, c, d].cpu().detach().numpy().tolist()
+            ret = list(zip(actual_values, coords))
+            update_params[v] = ret
+        elif len(diff.shape) == 1:
+            coords = torch.where(diff > threshold)
+            actual_values = diff[list(coords)].cpu().detach().numpy().tolist()
+            ret = list(zip(actual_values, coords))
+            update_params[v] = ret
+    return update_params

@@ -4,14 +4,10 @@ from model.sr_model import *
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
 from torchmetrics import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
 import cv2
 import os
 import time
-from glob import glob
-from collections import OrderedDict
-from datetime import date, datetime
 
 
 def test():
@@ -39,7 +35,7 @@ def test():
         hr_video = cfg.hr_path + video_basename + '.yuv'
 
         ######### In order to exclude some files from the testing process, insert their basename here #########
-        if video_basename in []:
+        if video_basename not in ['vimeo_166010169']:
             continue
         ######### In order to exclude some files from the testing process, insert their basename here #########
 
@@ -60,12 +56,22 @@ def test():
         for segment in range(cfg.segment_num):
             # Load saved parameters appropriately
             if segment == 0:
-                p = {v: saved_parameters[segment]['module.'+v] for v in sr_model.state_dict().keys()}
-                sr_model.load_state_dict(p, strict=False)
+                p = {v: saved_parameters[segment][v] for v in sr_model.state_dict().keys()}
+                sr_model.load_state_dict(p)
             else:
-                before = sr_model.state_dict()
-                after = {v: (saved_parameters[segment]['module.'+v] + before[v]) for v in before.keys()}
-                sr_model.load_state_dict(after)
+                p = sr_model.state_dict()
+                p = {v: p[v].clone() for v in p.keys()}
+                segment_param = saved_parameters[segment]
+                for v in p.keys():
+                    if len(segment_param[v]) == 0:
+                        continue
+                    delta, coords = list(zip(*segment_param[v]))
+                    if len(coords[0]) == 4:
+                        a, b, c, d = list(zip(*coords))
+                        p[v][a, b, c, d] += torch.Tensor(list(delta)).to(device)
+                    else:
+                        p[v][coords[0].cpu().numpy().tolist()] = torch.Tensor(list(delta)).to(device)
+                sr_model.load_state_dict(p)
 
             # Load input and output frames for current segment
             input_frames = get_segment_frames(lr_cap, cfg.segment_length * fps)
@@ -97,7 +103,6 @@ def test():
                         % (video_basename, segment + 1, cfg.segment_num, i, len(input_frames), loss, psnr, ssim, bicubic_psnr, bicubic_ssim, t1 - t0))
                 
                 ssim_calculate.reset()
-            t1 = time.time()
 
         # When all the frames in each video has gone through inference, calculate average PSNR and average SSIM
         average_inference_time = total_time / total_frames

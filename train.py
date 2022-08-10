@@ -4,8 +4,7 @@ from model.sr_model import *
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-from torchmetrics import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
+from torchmetrics import PeakSignalNoiseRatio
 import cv2
 import os
 from collections import OrderedDict
@@ -18,7 +17,7 @@ def train():
 
     # Get all configurations and set up model
     cfg = get_configs()
-    sr_model = nn.DataParallel(SR_Model(cfg.F, cfg.scale, cfg.patch_size))
+    sr_model = SR_Model(cfg.F, cfg.scale, cfg.patch_size)
     sr_model.to(device)
     sr_model.train()
 
@@ -31,7 +30,7 @@ def train():
         video_basename = os.path.basename(hr_video).split('.')[0]
 
         ######### In order to exclude some files from the testing process, insert their basename here #########
-        if video_basename in []:
+        if video_basename not in ['vimeo_166010169']:
             continue
         ######### In order to exclude some files from the testing process, insert their basename here #########
 
@@ -44,7 +43,11 @@ def train():
 
             for segment in range(cfg.segment_num):
                 # Save initial model parameters before update
-                before = sr_model.state_dict() if (segment != 0) else None
+                if segment != 0:
+                    before = sr_model.state_dict()
+                    before = {v: before[v].clone() for v in before.keys()}
+                else:
+                    before = None
 
                 # Fetch input and output frames from capture
                 try: 
@@ -55,7 +58,7 @@ def train():
                     output_frames = []
                 assert len(input_frames) == len(output_frames)
 
-                # Perform one iteration of training to find the parameters to update
+                # Perform training and find the parameters to update
                 for i, (input_frame, output_frame) in enumerate(zip(input_frames, output_frames)):
                     input_frame = input_frame.to(torch.float32).to(device) / 127.5 - 1.0
                     output_frame = output_frame.to(torch.float32).to(device) / 127.5 - 1.0
@@ -73,24 +76,26 @@ def train():
                 # perform one iteration of training, and update only those parameters
                 if before is not None and cfg.update_frac < 1:
                     after = sr_model.state_dict()
+                    after = {v: after[v].clone() for v in after.keys()}
                     train_mask = find_train_mask(before, after, cfg.update_frac)
-                    final = sr_model.state_dict()
+                    compressed = get_update_parameters(before, after, cfg.update_frac)
 
                     # Find Delta_t by finding the change in parameters, 
-                    delta = {v: (final[v] - before[v]) for v in final.keys()}
-                    masked_delta = {v: delta[v] * train_mask[v] for v in final.keys()}
+                    delta = {v: (after[v] - before[v]) for v in after.keys()}
+                    masked_delta = {v: delta[v] * train_mask[v] for v in after.keys()}
                     if epoch == cfg.epoch - 1:
-                        ord[segment] = masked_delta
+                        ord[segment] = compressed
 
                     # Update parameters
-                    updated_params = {v: before[v] + masked_delta[v] for v in final.keys()}
+                    updated_params = {v: before[v] + masked_delta[v] for v in after.keys()}
                     sr_model.load_state_dict(updated_params)
                     print("New parameters loaded to model. Updated fraction of parameters: %.2f" % (cfg.update_frac))
                 else:
                     if epoch == cfg.epoch - 1:
-                        ord[segment] = sr_model.state_dict()
-        
-        torch.save(ord, "%s%s_crf%d_F%d_seg%d.pth" % (cfg.save_path, video_basename, cfg.crf, cfg.F, cfg.segment_length))
+                        temp = sr_model.state_dict()
+                        ord[segment] = {v: temp[v].clone() for v in temp.keys()}
+
+        torch.save(ord, "%s%s_crf%d_F%d_seg%d_hello2.pth" % (cfg.save_path, video_basename, cfg.crf, cfg.F, cfg.segment_length))
         print("Saved the SRVC model for %s video file" % (video_basename))
 
 
