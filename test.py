@@ -56,21 +56,22 @@ def test():
         for segment in range(cfg.segment_num):
             # Load saved parameters appropriately
             if segment == 0:
-                p = {v: saved_parameters[segment][v] for v in sr_model.state_dict().keys()}
-                sr_model.load_state_dict(p)
+                sr_model.load_state_dict(saved_parameters[segment])
             else:
-                p = sr_model.state_dict()
-                p = {v: p[v].clone() for v in p.keys()}
+                i = sr_model.state_dict()
+                p = {v: i[v].clone() for v in i.keys()}
                 segment_param = saved_parameters[segment]
                 for v in p.keys():
                     if len(segment_param[v]) == 0:
                         continue
                     delta, coords = list(zip(*segment_param[v]))
-                    if len(coords[0]) == 4:
+                    if isinstance(coords[0], tuple):
                         a, b, c, d = list(zip(*coords))
                         p[v][a, b, c, d] += torch.Tensor(list(delta)).to(device)
+                    elif isinstance(coords[0], int):
+                        p[v][list(coords)] += torch.Tensor(list(delta)).to(device)
                     else:
-                        p[v][coords[0].cpu().numpy().tolist()] = torch.Tensor(list(delta)).to(device)
+                        raise Exception("A huge error!")
                 sr_model.load_state_dict(p)
 
             # Load input and output frames for current segment

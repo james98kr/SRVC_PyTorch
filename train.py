@@ -80,7 +80,7 @@ def train():
                     train_mask = find_train_mask(before, after, cfg.update_frac)
                     compressed = get_update_parameters(before, after, cfg.update_frac)
 
-                    # Find Delta_t by finding the change in parameters, 
+                    # Find Delta_t by finding the change in parameters, save compressed version in OrderedDict
                     delta = {v: (after[v] - before[v]) for v in after.keys()}
                     masked_delta = {v: delta[v] * train_mask[v] for v in after.keys()}
                     if epoch == cfg.epoch - 1:
@@ -93,9 +93,9 @@ def train():
                 else:
                     if epoch == cfg.epoch - 1:
                         temp = sr_model.state_dict()
-                        ord[segment] = {v: temp[v].clone() for v in temp.keys()}
+                        ord[segment] = {v: temp[v].clone().detach() for v in temp.keys()}
 
-        torch.save(ord, "%s%s_crf%d_F%d_seg%d_hello2.pth" % (cfg.save_path, video_basename, cfg.crf, cfg.F, cfg.segment_length))
+        torch.save(ord, "%s%s_crf%d_F%d_seg%d.pth" % (cfg.save_path, video_basename, cfg.crf, cfg.F, cfg.segment_length))
         print("Saved the SRVC model for %s video file" % (video_basename))
 
 

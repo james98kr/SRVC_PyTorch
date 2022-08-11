@@ -53,9 +53,10 @@ def get_update_parameters(before, after, update_frac):
     threshold = np.percentile(changes, 100 * (1 - update_frac))
     update_params = {}
     for v in before.keys():
-        diff = torch.abs(after[v] - before[v])
-        if len(diff.shape) == 4:
-            a, b, c, d = torch.where(diff > threshold)
+        abs_diff = torch.abs(after[v] - before[v])
+        diff = after[v] - before[v]
+        if len(abs_diff.shape) == 4:
+            a, b, c, d = torch.where(abs_diff > threshold)
             a = a.cpu().detach().numpy().tolist()
             b = b.cpu().detach().numpy().tolist()
             c = c.cpu().detach().numpy().tolist()
@@ -65,8 +66,8 @@ def get_update_parameters(before, after, update_frac):
             ret = list(zip(actual_values, coords))
             update_params[v] = ret
         elif len(diff.shape) == 1:
-            coords = torch.where(diff > threshold)
-            actual_values = diff[list(coords)].cpu().detach().numpy().tolist()
+            coords = torch.where(abs_diff > threshold)[0].cpu().detach().numpy().tolist()
+            actual_values = diff[coords].cpu().detach().numpy().tolist()
             ret = list(zip(actual_values, coords))
             update_params[v] = ret
     return update_params
