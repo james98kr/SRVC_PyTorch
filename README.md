@@ -67,12 +67,5 @@ For every video the model tests, there will be one ``.txt`` file created in the 
 ./log/log_{video_name}_crf{crf_value}_F{F_value}_seg{segment_length}.txt
 ```
 
-## Results
-<p align='center'>
-<img align="center" src="./docs/table.png" width="800" height="400"/>
-</p>
-
-Here is a part of the results from my own experiments. Using the SRVC model, I was able to achieve a much higher PSNR value in the inference process compared to the case where simple bicubic upsampling was used. I have used 11 different vimeo videos, and achieved an average PSNR value of **35.0914** and average SSIM value of **0.9256**. 
-
 ## References
 Code is built based on the SRVC model described in the original [**SRVC paper**](https://arxiv.org/abs/2104.02322), and some of the code is borrowed from the official [**GitHub repo**](https://github.com/AdaptiveVC/SRVC) of SRVC. 
