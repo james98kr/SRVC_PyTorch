@@ -35,7 +35,7 @@ def test():
         hr_video = cfg.hr_path + video_basename + '.yuv'
 
         ######### In order to exclude some files from the testing process, insert their basename here #########
-        if video_basename not in ['vimeo_166010169']:
+        if video_basename in []:
             continue
         ######### In order to exclude some files from the testing process, insert their basename here #########
 

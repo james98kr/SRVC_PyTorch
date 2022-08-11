@@ -30,7 +30,7 @@ def train():
         video_basename = os.path.basename(hr_video).split('.')[0]
 
         ######### In order to exclude some files from the testing process, insert their basename here #########
-        if video_basename not in ['vimeo_166010169']:
+        if video_basename in []:
             continue
         ######### In order to exclude some files from the testing process, insert their basename here #########
 
