@@ -34,31 +34,31 @@ def train():
             continue
         ######### In order to exclude some files from the testing process, insert their basename here #########
 
-        ord = OrderedDict()
         print("-----------------------Start training for video %s-----------------------" % (video_basename))
-        for epoch in range(cfg.epoch):
-            lr_cap = cv2.VideoCapture(lr_video)
-            hr_cap = VideoCaptureYUV(hr_video, cfg.hr_size)
-            fps = find_video_fps(video_basename, cfg.original_path)
+        ord = OrderedDict()
+        lr_cap = cv2.VideoCapture(lr_video)
+        hr_cap = VideoCaptureYUV(hr_video, cfg.hr_size)
+        fps = find_video_fps(video_basename, cfg.original_path)
 
-            for segment in range(cfg.segment_num):
-                # Save initial model parameters before update
-                if segment != 0:
-                    before = sr_model.state_dict()
-                    before = {v: before[v].clone() for v in before.keys()}
-                else:
-                    before = None
+        for segment in range(cfg.segment_num):
+            # Save initial model parameters before update
+            if segment != 0:
+                before = sr_model.state_dict()
+                before = {v: before[v].clone() for v in before.keys()}
+            else:
+                before = None
 
-                # Fetch input and output frames from capture
-                try: 
-                    input_frames = get_segment_frames(lr_cap, cfg.segment_length * fps)
-                    output_frames = get_segment_frames(hr_cap, cfg.segment_length * fps)
-                except:
-                    input_frames = []
-                    output_frames = []
-                assert len(input_frames) == len(output_frames)
+            # Fetch input and output frames from capture
+            try: 
+                input_frames = get_segment_frames(lr_cap, cfg.segment_length * fps)
+                output_frames = get_segment_frames(hr_cap, cfg.segment_length * fps)
+            except:
+                input_frames = []
+                output_frames = []
+            assert len(input_frames) == len(output_frames)
 
-                # Perform training and find the parameters to update
+            # Perform training and find the parameters to update
+            for epoch in range(cfg.epoch):
                 for i, (input_frame, output_frame) in enumerate(zip(input_frames, output_frames)):
                     input_frame = input_frame.to(torch.float32).to(device) / 127.5 - 1.0
                     output_frame = output_frame.to(torch.float32).to(device) / 127.5 - 1.0
@@ -72,28 +72,26 @@ def train():
                     loss.backward()
                     optimizer.step()
 
-                # Save the newly trained model parameters, find parameters to update, 
-                # perform one iteration of training, and update only those parameters
-                if before is not None and cfg.update_frac < 1:
-                    after = sr_model.state_dict()
-                    after = {v: after[v].clone() for v in after.keys()}
-                    train_mask = find_train_mask(before, after, cfg.update_frac)
-                    compressed = get_update_parameters(before, after, cfg.update_frac)
+            # Save the newly trained model parameters, find parameters to update, 
+            # perform one iteration of training, and update only those parameters
+            if before is not None and cfg.update_frac < 1:
+                after = sr_model.state_dict()
+                after = {v: after[v].clone() for v in after.keys()}
+                train_mask = find_train_mask(before, after, cfg.update_frac)
+                compressed = get_update_parameters(before, after, cfg.update_frac)
 
-                    # Find Delta_t by finding the change in parameters, save compressed version in OrderedDict
-                    delta = {v: (after[v] - before[v]) for v in after.keys()}
-                    masked_delta = {v: delta[v] * train_mask[v] for v in after.keys()}
-                    if epoch == cfg.epoch - 1:
-                        ord[segment] = compressed
+                # Find Delta_t by finding the change in parameters, save compressed version in OrderedDict
+                delta = {v: (after[v] - before[v]) for v in after.keys()}
+                masked_delta = {v: delta[v] * train_mask[v] for v in after.keys()}
+                ord[segment] = compressed
 
-                    # Update parameters
-                    updated_params = {v: before[v] + masked_delta[v] for v in after.keys()}
-                    sr_model.load_state_dict(updated_params)
-                    print("New parameters loaded to model. Updated fraction of parameters: %.2f" % (cfg.update_frac))
-                else:
-                    if epoch == cfg.epoch - 1:
-                        temp = sr_model.state_dict()
-                        ord[segment] = {v: temp[v].clone().detach() for v in temp.keys()}
+                # Update parameters
+                updated_params = {v: before[v] + masked_delta[v] for v in after.keys()}
+                sr_model.load_state_dict(updated_params)
+                print("New parameters loaded to model. Updated fraction of parameters: %.2f" % (cfg.update_frac))
+            else:
+                temp = sr_model.state_dict()
+                ord[segment] = {v: temp[v].clone() for v in temp.keys()}
 
         torch.save(ord, "%s%s_crf%d_F%d_seg%d.pth" % (cfg.save_path, video_basename, cfg.crf, cfg.F, cfg.segment_length))
         print("Saved the SRVC model for %s video file" % (video_basename))

@@ -55,13 +55,14 @@ def test():
     
         for segment in range(cfg.segment_num):
             # Load saved parameters appropriately
-            if segment == 0:
+            if segment == 0 or cfg.update_frac == 1:
                 sr_model.load_state_dict(saved_parameters[segment])
             else:
                 i = sr_model.state_dict()
                 p = {v: i[v].clone() for v in i.keys()}
                 segment_param = saved_parameters[segment]
                 for v in p.keys():
+                    print(v)
                     if len(segment_param[v]) == 0:
                         continue
                     delta, coords = list(zip(*segment_param[v]))
