@@ -6,6 +6,9 @@ from glob import glob
 import numpy as np
 import torch
 
+USE_CUDA = torch.cuda.is_available()
+device = torch.device('cuda' if USE_CUDA else 'cpu')
+
 def parse_size(string):
     temp = string.split(',')
     return (int(temp[0]), int(temp[1]))
@@ -71,3 +74,12 @@ def get_update_parameters(before, after, update_frac):
             ret = list(zip(actual_values, coords))
             update_params[v] = ret
     return update_params
+
+
+def threshold_output(my_output):
+    shape = my_output.shape
+    cut_negative_values = (torch.ones(shape) * (-1)).to(device)
+    cut_positive_values = torch.ones(shape).to(device)
+    my_output = torch.maximum(my_output, cut_negative_values)
+    my_output = torch.minimum(my_output, cut_positive_values)
+    return my_output

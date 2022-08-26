@@ -30,24 +30,17 @@ def train():
         video_basename = os.path.basename(hr_video).split('.')[0]
 
         ######### In order to exclude some files from the testing process, insert their basename here #########
-        if video_basename in []:
+        if video_basename not in ['vimeo_204439769']:
             continue
         ######### In order to exclude some files from the testing process, insert their basename here #########
 
         print("-----------------------Start training for video %s-----------------------" % (video_basename))
         ord = OrderedDict()
-        lr_cap = cv2.VideoCapture(lr_video)
+        lr_cap = VideoCaptureYUV(lr_video, cfg.lr_size)
         hr_cap = VideoCaptureYUV(hr_video, cfg.hr_size)
         fps = find_video_fps(video_basename, cfg.original_path)
 
         for segment in range(cfg.segment_num):
-            # Save initial model parameters before update
-            if segment != 0:
-                before = sr_model.state_dict()
-                before = {v: before[v].clone() for v in before.keys()}
-            else:
-                before = None
-
             # Fetch input and output frames from capture
             try: 
                 input_frames = get_segment_frames(lr_cap, cfg.segment_length * fps)
@@ -57,14 +50,27 @@ def train():
                 output_frames = []
             assert len(input_frames) == len(output_frames)
 
+            # Skip some of the first segments
+            if segment < cfg.segment_skip:
+                continue
+            # Save initial model parameters before update
+            if segment > cfg.segment_skip:
+                before = sr_model.state_dict()
+                before = OrderedDict({v: before[v].clone() for v in before.keys()})
+            else:
+                before = None
+
             # Perform training and find the parameters to update
             for epoch in range(cfg.epoch):
                 for i, (input_frame, output_frame) in enumerate(zip(input_frames, output_frames)):
-                    input_frame = input_frame.to(torch.float32).to(device) / 127.5 - 1.0
-                    output_frame = output_frame.to(torch.float32).to(device) / 127.5 - 1.0
+                    input_frame = input_frame.to(torch.float32).to(device) / 255
+                    output_frame = output_frame.to(torch.float32).to(device) / 255
                     optimizer.zero_grad()
                     my_output_frame = sr_model(input_frame).to(torch.float32)
                     loss = criterion(my_output_frame, output_frame)
+
+                    output_frame = (output_frame * 255).to(torch.uint8)
+                    my_output_frame = (my_output_frame * 255).to(torch.uint8)
                     psnr = psnr_calculate(my_output_frame, output_frame)
                     if i % 10 == 0:
                         print("Epoch: %d/%d, Video: %s, Segment: %d/%d, Frame: %d/%d, L2Loss: %f, PSNR: %f" \
@@ -76,24 +82,24 @@ def train():
             # perform one iteration of training, and update only those parameters
             if before is not None and cfg.update_frac < 1:
                 after = sr_model.state_dict()
-                after = {v: after[v].clone() for v in after.keys()}
+                after = OrderedDict({v: after[v].clone() for v in after.keys()})
                 train_mask = find_train_mask(before, after, cfg.update_frac)
                 compressed = get_update_parameters(before, after, cfg.update_frac)
 
                 # Find Delta_t by finding the change in parameters, save compressed version in OrderedDict
-                delta = {v: (after[v] - before[v]) for v in after.keys()}
-                masked_delta = {v: delta[v] * train_mask[v] for v in after.keys()}
+                delta = OrderedDict({v: (after[v] - before[v]) for v in after.keys()})
+                masked_delta = OrderedDict({v: delta[v] * train_mask[v] for v in after.keys()})
                 ord[segment] = compressed
 
                 # Update parameters
-                updated_params = {v: before[v] + masked_delta[v] for v in after.keys()}
+                updated_params = OrderedDict({v: before[v] + masked_delta[v] for v in after.keys()})
                 sr_model.load_state_dict(updated_params)
                 print("New parameters loaded to model. Updated fraction of parameters: %.2f" % (cfg.update_frac))
             else:
                 temp = sr_model.state_dict()
-                ord[segment] = {v: temp[v].clone() for v in temp.keys()}
+                ord[segment] = OrderedDict({v: temp[v].clone() for v in temp.keys()})
 
-        torch.save(ord, "%s%s_crf%d_F%d_seg%d.pth" % (cfg.save_path, video_basename, cfg.crf, cfg.F, cfg.segment_length))
+        torch.save(ord, "%s%s_crf%d_F%d_seg%d_skip%d_frac%.2f.pth" % (cfg.save_path, video_basename, cfg.crf, cfg.F, cfg.segment_length, cfg.segment_skip, cfg.update_frac))
         print("Saved the SRVC model for %s video file" % (video_basename))
 
 
