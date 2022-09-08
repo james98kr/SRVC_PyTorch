@@ -9,10 +9,13 @@ crf: 10
 start_time: 0
 end_time: 600
 segment_length: 5
+segment_skip: 0
 F: 32
 scale: 4
 patch_size: 5,5
-epoch: 1
+crop: True
+epoch: 4
+batch_size: 1
 lr: 0.0001
 beta1: 0.9
 beta2: 0.999

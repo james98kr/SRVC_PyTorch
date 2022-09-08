@@ -31,7 +31,12 @@ bash ./content_encoder.sh ../data/yuv_vidoes ../data/content_encoded_videos ../d
 ```
 You can adjust the CRF (constant rate factor) values that will be used to encode the videos in line 27 of the ``./content_encoder.sh`` file. Path to original video file is required in order to get the fps(frames per second) information, which is needed to encode the video. 
 
-
+## Reencode videos using H.264/H.265 codec
+Execute the following command to reencode the raw YUV files into H.264/H.265-encoded ``.mp4`` files without downsampling or resizing.
+```
+bash ./content_reencoder.sh ../data/yuv_vidoes ../data/content_reencoded_videos ../data/original_videos
+```
+The output will be used as the 1080p H.264/H.265 baseline for comparing the performance of the SRVC model to the standard codecs. Note that you may change the CRF values in line 26 of the ``./content_reencoder.sh`` file in order to control the bitrate of the output files. 
 
 
 

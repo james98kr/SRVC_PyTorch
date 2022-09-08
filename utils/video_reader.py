@@ -14,7 +14,7 @@ def get_segment_frames(cap, frame_per_segment):
                 break
                 # raise Exception("Unable to read frame!")
             frame = np.transpose(frame, (2,0,1))
-            frame = torch.unsqueeze(torch.from_numpy(frame), 0)
+            frame = torch.from_numpy(frame)
             frames.append(frame)
         return frames
     else:
@@ -25,10 +25,9 @@ def get_segment_frames(cap, frame_per_segment):
                 # raise Exception("Unable to read frame!")
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             frame = np.transpose(frame, (2,0,1))
-            frame = torch.unsqueeze(torch.from_numpy(frame), 0)
+            frame = torch.from_numpy(frame)
             frames.append(frame)
         return frames
-
 
 class VideoCaptureYUV:
     def __init__(self, filename, size):

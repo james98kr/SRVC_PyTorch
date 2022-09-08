@@ -17,7 +17,7 @@ do
     outputname=${output_dir}/${onlyname}.yuv
 
     ffmpeg -y -i ${file} -ss 0 -t ${min}:00 \
-        -vf scale=${width}:${height} \
+        -vf scale=${width}:${height}:out_color_matrix=bt709 -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range 1 \
         -c:v rawvideo -pix_fmt yuv420p -vsync 0 \
         ${outputname}
 done

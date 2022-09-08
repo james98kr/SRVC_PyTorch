@@ -1,14 +1,13 @@
 from utils.video_reader import *
 from utils.functions import *
+from utils.dataset import *
 from model.sr_model import *
-import numpy as np
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader
 from torchmetrics import PeakSignalNoiseRatio
-import cv2
 import os
 from collections import OrderedDict
-
 
 def train():
     # CUDA, GPU setting
@@ -17,26 +16,28 @@ def train():
 
     # Get all configurations and set up model
     cfg = get_configs()
-    sr_model = SR_Model(cfg.F, cfg.scale, cfg.patch_size)
+    sr_model = nn.DataParallel(SR_Model(cfg.F, cfg.scale, cfg.patch_size))
     sr_model.to(device)
     sr_model.train()
 
     # Declare optimizer and loss function
     optimizer = torch.optim.Adam(sr_model.parameters(), lr=cfg.lr, betas=(cfg.beta1, cfg.beta2))
     criterion = nn.MSELoss() if not cfg.L1_loss else nn.L1Loss()
-    psnr_calculate = PeakSignalNoiseRatio().to(device)
+    psnr_calculate = PeakSignalNoiseRatio(data_range=1.0).to(device)
 
     for lr_video, hr_video in zip(cfg.lr_video_list, cfg.hr_video_list):
         video_basename = os.path.basename(hr_video).split('.')[0]
+        lr_video_basename = os.path.basename(lr_video).split('.')[0].split('_crf')[0]
+        assert video_basename == lr_video_basename
 
         ######### In order to exclude some files from the testing process, insert their basename here #########
-        if video_basename not in ['vimeo_204439769']:
+        if video_basename not in ['vimeo_166010169']:
             continue
         ######### In order to exclude some files from the testing process, insert their basename here #########
 
         print("-----------------------Start training for video %s-----------------------" % (video_basename))
         ord = OrderedDict()
-        lr_cap = VideoCaptureYUV(lr_video, cfg.lr_size)
+        lr_cap = cv2.VideoCapture(lr_video)
         hr_cap = VideoCaptureYUV(hr_video, cfg.hr_size)
         fps = find_video_fps(video_basename, cfg.original_path)
 
@@ -60,48 +61,100 @@ def train():
             else:
                 before = None
 
-            # Perform training and find the parameters to update
-            for epoch in range(cfg.epoch):
-                for i, (input_frame, output_frame) in enumerate(zip(input_frames, output_frames)):
-                    input_frame = input_frame.to(torch.float32).to(device) / 255
-                    output_frame = output_frame.to(torch.float32).to(device) / 255
-                    optimizer.zero_grad()
-                    my_output_frame = sr_model(input_frame).to(torch.float32)
-                    loss = criterion(my_output_frame, output_frame)
-
-                    output_frame = (output_frame * 255).to(torch.uint8)
-                    my_output_frame = (my_output_frame * 255).to(torch.uint8)
-                    psnr = psnr_calculate(my_output_frame, output_frame)
-                    if i % 10 == 0:
+            # Perform one iteration of training for finding the training mask
+            print("First iteration for training mask:")
+            srvc_dataset = SRVC_DataSet(input_frames, output_frames)
+            srvc_dataloader = DataLoader(srvc_dataset, batch_size=cfg.batch_size, shuffle=False)
+            for i, (input_frame, output_frame) in enumerate(srvc_dataloader):
+                if cfg.crop:
+                    input_frame, output_frame = crop_frame(input_frame, output_frame)
+                input_frame = input_frame.to(torch.float32).to(device) / 255
+                output_frame = output_frame.to(torch.float32).to(device) / 255
+                optimizer.zero_grad()
+                my_output_frame = sr_model(input_frame).to(torch.float32)
+                loss = criterion(my_output_frame, output_frame)
+                psnr = psnr_calculate(my_output_frame, output_frame)
+                print("First iteration - Segment: %d/%d, Frame: %d/%d, L2Loss: %f, PSNR: %f" \
+                    % (segment + 1, cfg.segment_num, i, len(srvc_dataloader), loss.cpu().detach().numpy(), psnr)) 
+                loss.backward()
+                optimizer.step()
+            
+            # Find training mask if segment is greater than segment_skip or cfg.update_frac < 1
+            # Otherwise simply continue training, and save the model parameters to ord
+            print("Actual training for Adam updates:")
+            if before is None or cfg.update_frac == 1:
+                for epoch in range(cfg.epoch - 1):
+                    srvc_dataset = SRVC_DataSet(input_frames, output_frames)
+                    srvc_dataloader = DataLoader(srvc_dataset, batch_size=cfg.batch_size, shuffle=False)
+                    for i, (input_frame, output_frame) in enumerate(srvc_dataloader):
+                        if cfg.crop:
+                            input_frame, output_frame = crop_frame(input_frame, output_frame)
+                        input_frame = input_frame.to(torch.float32).to(device) / 255
+                        output_frame = output_frame.to(torch.float32).to(device) / 255
+                        optimizer.zero_grad()
+                        my_output_frame = sr_model(input_frame).to(torch.float32)
+                        loss = criterion(my_output_frame, output_frame)
+                        psnr = psnr_calculate(my_output_frame, output_frame)
                         print("Epoch: %d/%d, Video: %s, Segment: %d/%d, Frame: %d/%d, L2Loss: %f, PSNR: %f" \
-                            % (epoch + 1, cfg.epoch, video_basename, segment + 1, cfg.segment_num, i, len(input_frames), loss.cpu().detach().numpy(), psnr)) 
-                    loss.backward()
-                    optimizer.step()
-
-            # Save the newly trained model parameters, find parameters to update, 
-            # perform one iteration of training, and update only those parameters
-            if before is not None and cfg.update_frac < 1:
+                            % (epoch + 1, cfg.epoch, video_basename, segment + 1, cfg.segment_num, i, len(srvc_dataloader), loss.cpu().detach().numpy(), psnr)) 
+                        loss.backward()
+                        optimizer.step()
+                temp = sr_model.state_dict()
+                ord[segment] = OrderedDict({v: temp[v].clone() for v in temp.keys()})
+            else:
                 after = sr_model.state_dict()
                 after = OrderedDict({v: after[v].clone() for v in after.keys()})
                 train_mask = find_train_mask(before, after, cfg.update_frac)
-                compressed = get_update_parameters(before, after, cfg.update_frac)
-
-                # Find Delta_t by finding the change in parameters, save compressed version in OrderedDict
                 delta = OrderedDict({v: (after[v] - before[v]) for v in after.keys()})
-                masked_delta = OrderedDict({v: delta[v] * train_mask[v] for v in after.keys()})
-                ord[segment] = compressed
-
-                # Update parameters
-                updated_params = OrderedDict({v: before[v] + masked_delta[v] for v in after.keys()})
+                masked_delta = OrderedDict({v: delta[v] * train_mask[v] for v in delta.keys()})
+                updated_params = OrderedDict({v: before[v] + masked_delta[v] for v in before.keys()})
                 sr_model.load_state_dict(updated_params)
-                print("New parameters loaded to model. Updated fraction of parameters: %.2f" % (cfg.update_frac))
-            else:
-                temp = sr_model.state_dict()
-                ord[segment] = OrderedDict({v: temp[v].clone() for v in temp.keys()})
+
+                for epoch in range(cfg.epoch - 1):
+                    srvc_dataset = SRVC_DataSet(input_frames, output_frames)
+                    srvc_dataloader = DataLoader(srvc_dataset, batch_size=cfg.batch_size, shuffle=False)
+
+                    # Parameters before current training iteration
+                    prev = sr_model.state_dict()
+                    prev = OrderedDict({v: prev[v].clone() for v in prev.keys()})
+
+                    for i, (input_frame, output_frame) in enumerate(srvc_dataloader):
+                        if cfg.crop:
+                            input_frame, output_frame = crop_frame(input_frame, output_frame)
+                        input_frame = input_frame.to(torch.float32).to(device) / 255
+                        output_frame = output_frame.to(torch.float32).to(device) / 255
+                        optimizer.zero_grad()
+                        my_output_frame = sr_model(input_frame).to(torch.float32)
+                        loss = criterion(my_output_frame, output_frame)
+                        psnr = psnr_calculate(my_output_frame, output_frame)
+                        print("Epoch: %d/%d, Video: %s, Segment: %d/%d, Frame: %d/%d, L2Loss: %f, PSNR: %f" \
+                            % (epoch + 2, cfg.epoch, video_basename, segment + 1, cfg.segment_num, i + 1, len(srvc_dataloader), loss.cpu().detach().numpy(), psnr)) 
+                        loss.backward()
+                        optimizer.step()
+
+                    # Parameters after current training iteration
+                    next = sr_model.state_dict()
+                    next = OrderedDict({v: next[v].clone() for v in next.keys()})
+
+                    # Calculating delta and masked_delta, and updating the model parameters
+                    delta = OrderedDict({v: (next[v] - prev[v]) for v in next.keys()})
+                    masked_delta = OrderedDict({v: delta[v] * train_mask[v] for v in delta.keys()})
+                    updated_params = OrderedDict({v: prev[v] + masked_delta[v] for v in prev.keys()})
+                    sr_model.load_state_dict(updated_params)
+
+                final = sr_model.state_dict()
+                final = OrderedDict({v: final[v].clone() for v in final.keys()})
+                compressed = get_update_parameters(before, final, cfg.update_frac)
+                ord[segment] = compressed
+                cnt = 0
+                for v in compressed.keys():
+                    cnt += len(compressed[v][0])
+                print("Epoch: %d/%d, updated fraction of parameters: %.2f, updated number of parameters: %d" % (epoch + 1, cfg.epoch, cfg.update_frac, cnt))
 
         torch.save(ord, "%s%s_crf%d_F%d_seg%d_skip%d_frac%.2f.pth" % (cfg.save_path, video_basename, cfg.crf, cfg.F, cfg.segment_length, cfg.segment_skip, cfg.update_frac))
         print("Saved the SRVC model for %s video file" % (video_basename))
-
+        lr_cap.release()
+        hr_cap.release()
 
 if __name__ == "__main__":
     train()

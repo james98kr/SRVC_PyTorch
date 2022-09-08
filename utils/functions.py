@@ -1,3 +1,4 @@
+import random
 import subprocess
 import argparse
 import yaml
@@ -13,7 +14,6 @@ def parse_size(string):
     temp = string.split(',')
     return (int(temp[0]), int(temp[1]))
 
-
 def find_video_fps(video_basename, original_path):
     fpscmd = "ffprobe -v error -select_streams v -of default=noprint_wrappers=1:nokey=1 -show_entries stream=r_frame_rate " + original_path + video_basename + ".mp4"
     result = subprocess.run(fpscmd.split(' '), stdout=subprocess.PIPE).stdout.decode('utf-8')[:-1]
@@ -23,7 +23,6 @@ def find_video_fps(video_basename, original_path):
     else:
         fps = int(round(float(result)))
     return fps
-
 
 def get_configs():
     parser = argparse.ArgumentParser('srvc')
@@ -41,7 +40,6 @@ def get_configs():
     cfg.segment_num = cfg.video_length // cfg.segment_length
     return cfg
 
-
 def find_train_mask(before, after, update_frac):
     changes = [np.reshape(np.abs(after[v].cpu().numpy() - before[v].cpu().numpy()), (-1,)) for v in before.keys()]
     changes = np.concatenate(changes, axis=0)
@@ -49,6 +47,38 @@ def find_train_mask(before, after, update_frac):
     train_mask = {v: torch.abs(after[v] - before[v]) > threshold for v in before.keys()}
     return train_mask
 
+def threshold_output(my_output):
+    shape = my_output.shape
+    cut_negative_values = (torch.ones(shape) * 0).to(device)
+    cut_positive_values = (torch.ones(shape) * 1).to(device)
+    my_output = torch.maximum(my_output, cut_negative_values)
+    my_output = torch.minimum(my_output, cut_positive_values)
+    return my_output
+
+# def get_update_parameters(before, after, update_frac):
+#     changes = [np.reshape(np.abs(after[v].cpu().numpy() - before[v].cpu().numpy()), (-1,)) for v in before.keys()]
+#     changes = np.concatenate(changes, axis=0)
+#     threshold = np.percentile(changes, 100 * (1 - update_frac))
+#     update_params = {}
+#     for v in before.keys():
+#         abs_diff = torch.abs(after[v] - before[v])
+#         diff = after[v] - before[v]
+#         if len(diff.shape) == 4:
+#             a, b, c, d = torch.where(abs_diff > threshold)
+#             a = a.cpu().detach().numpy().tolist()
+#             b = b.cpu().detach().numpy().tolist()
+#             c = c.cpu().detach().numpy().tolist()
+#             d = d.cpu().detach().numpy().tolist()
+#             coords = list(zip(a, b, c, d))
+#             actual_values = diff[a, b, c, d].cpu().detach().numpy().tolist()
+#             ret = list(zip(actual_values, coords))
+#             update_params[v] = ret
+#         elif len(diff.shape) == 1:
+#             coords = torch.where(abs_diff > threshold)[0].cpu().detach().numpy().tolist()
+#             actual_values = diff[coords].cpu().detach().numpy().tolist()
+#             ret = list(zip(actual_values, coords))
+#             update_params[v] = ret
+#     return update_params
 
 def get_update_parameters(before, after, update_frac):
     changes = [np.reshape(np.abs(after[v].cpu().numpy() - before[v].cpu().numpy()), (-1,)) for v in before.keys()]
@@ -58,28 +88,28 @@ def get_update_parameters(before, after, update_frac):
     for v in before.keys():
         abs_diff = torch.abs(after[v] - before[v])
         diff = after[v] - before[v]
-        if len(abs_diff.shape) == 4:
+        if len(diff.shape) == 4:
             a, b, c, d = torch.where(abs_diff > threshold)
-            a = a.cpu().detach().numpy().tolist()
-            b = b.cpu().detach().numpy().tolist()
-            c = c.cpu().detach().numpy().tolist()
-            d = d.cpu().detach().numpy().tolist()
-            coords = list(zip(a, b, c, d))
-            actual_values = diff[a, b, c, d].cpu().detach().numpy().tolist()
-            ret = list(zip(actual_values, coords))
-            update_params[v] = ret
+            a = a.cpu().detach().to(torch.int16)
+            b = b.cpu().detach().to(torch.int16)
+            c = c.cpu().detach().to(torch.int16)
+            d = d.cpu().detach().to(torch.int16)
+            actual_values = diff[a.tolist(), b.tolist(), c.tolist(), d.tolist()].cpu().detach().numpy().tolist()
+            coords = (a, b, c, d)
+            update_params[v] = (actual_values, coords)
         elif len(diff.shape) == 1:
-            coords = torch.where(abs_diff > threshold)[0].cpu().detach().numpy().tolist()
-            actual_values = diff[coords].cpu().detach().numpy().tolist()
-            ret = list(zip(actual_values, coords))
-            update_params[v] = ret
+            coords = torch.where(abs_diff > threshold)[0].cpu().detach().to(torch.int16)
+            actual_values = diff[coords.tolist()].cpu().detach().numpy().tolist()
+            update_params[v] = (actual_values, coords)
     return update_params
 
-
-def threshold_output(my_output):
-    shape = my_output.shape
-    cut_negative_values = (torch.ones(shape) * (-1)).to(device)
-    cut_positive_values = torch.ones(shape).to(device)
-    my_output = torch.maximum(my_output, cut_negative_values)
-    my_output = torch.minimum(my_output, cut_positive_values)
-    return my_output
+def crop_frame(original_frame, original_label, scale=4):
+    oheight = original_frame.shape[-2]
+    owidth = original_frame.shape[-1]
+    height = oheight // 2
+    width = owidth // 2
+    randh = random.randint(0, oheight - height)
+    randw = random.randint(0, owidth - width)
+    cropped_frame = original_frame[:, :, randh:randh+height, randw:randw+width]
+    cropped_label = original_label[:, :, scale*randh:scale*(randh+height), scale*randw:scale*(randw+width)]
+    return cropped_frame, cropped_label

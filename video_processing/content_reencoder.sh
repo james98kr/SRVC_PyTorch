@@ -1,9 +1,8 @@
 #!/bin/bash
 
-# This file takes the 1080p YUV420p raw format video files in order to
-# downsample them to 480x270 resolution, then encode them using H.265.
-# The output of this file forms the content stream, which is to be decoded
-# later on using the content decoder.
+# This file takes the 1080p YUV420p raw format video files encode them using H.265
+# without downsampling or resizing. The output will be used as the 1080p H.264/H.265
+# baseline for comparison. 
 
 yuv_dir=$1
 output_dir=$2
@@ -15,8 +14,8 @@ do
     onlyname=${onlyname%.*}
     oheight=1080
     owidth=1920
-    height=270
-    width=480
+    height=1080
+    width=1920
     
     originalname=${original_dir}/${onlyname}*
     fps=$(ffprobe -v error -select_streams v -of default=noprint_wrappers=1:nokey=1 \
@@ -36,4 +35,3 @@ do
         done
     done
 done
-

@@ -6,13 +6,6 @@ import torch.nn.functional as Func
 USE_CUDA = torch.cuda.is_available()
 device = torch.device('cuda' if USE_CUDA else 'cpu')
 
-edsr_args = {'n_resblocks': 16,
-            'n_feats': 64,
-            'scale': [4],
-            'rgb_range': 255,
-            'n_colors': 3,
-            'res_scale': 1}
-
 def default_conv(in_channels, out_channels, kernel_size, bias=True):
     return nn.Conv2d(
         in_channels, out_channels, kernel_size,
