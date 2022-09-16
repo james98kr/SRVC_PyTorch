@@ -50,7 +50,7 @@ Make sure to check the ``./configs/config.yaml`` file before training. The ``crf
 
 For each video that you train, there will be one ``.pth`` file that will be saved in the ``./save`` directory as the model stream for that video. It will be saved as follows:
 ```
-./save/{video_name}_crf{crf_value}_F{F_value}_seg{segment_length}.pth
+./save/{video_name}_crf{crf_value}_F{F_value}_seg{segment_length}_frac{update_frac}_epoch{epoch}_batch{batch_size}.pth
 ```
 
 ## Inference
@@ -58,13 +58,13 @@ When finished with training, you can test the effectiveness of the compressed co
 * PSNR (peak signal-to-noise ratio)
 * SSIM (structural similarity index measure)
 
-You can change the ``crf``, ``F``, ``segment_length`` values in ``./configs/config.yaml`` in order to select which file you want to test. You can test the model with the following command:
+You can change the ``crf``, ``F``, ``segment_length``, and other hyperparameter values in ``./configs/config.yaml`` in order to select which file you want to test. You can test the model with the following command:
 ```
 python test.py ./configs/config.yaml
 ```
 For every video the model tests, there will be one ``.txt`` file created in the ``./log`` directory. You can check out the results of the test in the file.
 ```
-./log/log_{video_name}_crf{crf_value}_F{F_value}_seg{segment_length}.txt
+./logs/log_{video_name}_crf{crf_value}_F{F_value}_seg{segment_length}_frac{update_frac}_epoch{epoch}_batch{batch_size}.txt
 ```
 
 ## References
