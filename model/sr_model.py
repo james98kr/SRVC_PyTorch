@@ -17,7 +17,6 @@ def space_to_batch(lr, patch_shape):
         output = torch.cat((output, temp))
     return output
 
-
 def batch_to_space(patches, patch_num):
     # patches is a tensor of shape (N*r*r,C,H,W)
     # patch_num is the number of row/column of patches from the original frame
@@ -35,10 +34,8 @@ def batch_to_space(patches, patch_num):
                 cnt += 1
     return output
 
-
 def depth_to_space(x, scale):
     return Func.pixel_shuffle(x, scale)
-
 
 class AdaptiveConv(nn.Module):
     def __init__(self, F):
@@ -68,7 +65,6 @@ class AdaptiveConv(nn.Module):
         output = Func.relu(output + bias)
         return output
 
-
 class RegularConv(nn.Module):
     def __init__(self, F, scale):
         super(RegularConv, self).__init__()
@@ -81,7 +77,6 @@ class RegularConv(nn.Module):
         x = Func.relu(self.conv2(x))
         output = self.conv3(x)
         return output
-
 
 class SR_Model(nn.Module):
     def __init__(self, F, scale, patch_shape):

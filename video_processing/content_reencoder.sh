@@ -23,14 +23,13 @@ do
 
     for format in 265;
     do
-        # for crf in 10 20 25 30 35 40 50;
-        for crf in 10;
+        for crf in 10 20 30 40 50;
         do
             outputname=${output_dir}/${onlyname}_crf${crf}.mp4
             ffmpeg -y -f rawvideo -s ${owidth}x${oheight} -pix_fmt yuv420p -framerate ${fps} \
                 -i ${file} -vf scale=${width}:${height}:out_color_matrix=bt709 -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range 1 \
                 -sws_flags area -vcodec libx${format} -preset slow \
-                -vsync 0 -pix_fmt yuv420p\
+                -vsync 0 -pix_fmt yuv420p \
                 -crf ${crf} -an ${outputname}
         done
     done

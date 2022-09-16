@@ -5,3 +5,4 @@
 /data/reencoded_videos/*.mp4
 /logs/*.txt
 /save/*.pth
+video.py

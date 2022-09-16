@@ -46,7 +46,7 @@ Once the data preparation is finished and the YUV-format high-resolution videos 
 python train.py ./configs/config.yaml
 ```
 
-Make sure to check the ``./configs/config.yaml`` file before training. The ``crf`` value that you set in line 8 will indicate that you will train the model on all encoded videos with that specific CRF value. 
+Make sure to check the ``./configs/config.yaml`` file before training. The ``crf`` value that you set in line 8 will indicate that you will train the model on all encoded videos with that specific CRF value. As for the hyperparameter values, the configuration file holds the default parameters that the author mentions in the original paper, but the ``epoch`` and ``batch_size`` are values that I picked from my own experiments, as the author does not mention specific values in the paper. 
 
 For each video that you train, there will be one ``.pth`` file that will be saved in the ``./save`` directory as the model stream for that video. It will be saved as follows:
 ```

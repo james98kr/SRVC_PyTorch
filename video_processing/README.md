@@ -25,14 +25,14 @@ bash ./create_yuv.sh ../data/original_videos ../data/yuv_videos
 Use the following command to create raw YUV files from the original video files that you downloaded earlier. As described in the paper, all videos will be shortened to 10 minutes with a 1080p resolution. 
 
 ## Encode videos using H.265 codec
-Execute the following command to encode the raw YUV files into H.265-encoded ``.mp4`` files. 
+Execute the following command to encode the raw YUV files into H.265-encoded ``.mp4`` files with size (270 X 480). 
 ```
 bash ./content_encoder.sh ../data/yuv_vidoes ../data/content_encoded_videos ../data/original_videos
 ```
 You can adjust the CRF (constant rate factor) values that will be used to encode the videos in line 27 of the ``./content_encoder.sh`` file. Path to original video file is required in order to get the fps(frames per second) information, which is needed to encode the video. 
 
 ## Reencode videos using H.264/H.265 codec
-Execute the following command to reencode the raw YUV files into H.264/H.265-encoded ``.mp4`` files without downsampling or resizing.
+Execute the following command to reencode the raw YUV files into H.264/H.265-encoded ``.mp4`` files without downsampling or resizing (size maintained as 1080 X 1920).
 ```
 bash ./content_reencoder.sh ../data/yuv_vidoes ../data/content_reencoded_videos ../data/original_videos
 ```

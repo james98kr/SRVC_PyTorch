@@ -32,20 +32,14 @@ def get_configs():
     cfg = Munch.fromDict(yaml.safe_load(cfg_txt))
     cfg.lr_video_list = sorted(glob(cfg.lr_path + '*crf' + str(cfg.crf) + '*'))
     cfg.hr_video_list = sorted(glob(cfg.hr_path + '*'))[:len(cfg.lr_video_list)]
-    cfg.saved_file_list = sorted(glob(cfg.save_path + '*' + str(cfg.crf) + '*' + str(cfg.F) + '*' + str(cfg.segment_length) + '*'))
+    cfg.saved_file_list = sorted(glob(cfg.save_path + '*' + str(cfg.crf) + '*' + str(cfg.F) + '*' + \
+        str(cfg.segment_length) + '*epoch' + str(cfg.epoch) + '*batch' + str(cfg.batch_size) + '*'))
     cfg.hr_size = parse_size(cfg.hr_size)
     cfg.lr_size = parse_size(cfg.lr_size)
     cfg.patch_size = parse_size(cfg.patch_size)
     cfg.video_length = cfg.end_time - cfg.start_time
     cfg.segment_num = cfg.video_length // cfg.segment_length
     return cfg
-
-def find_train_mask(before, after, update_frac):
-    changes = [np.reshape(np.abs(after[v].cpu().numpy() - before[v].cpu().numpy()), (-1,)) for v in before.keys()]
-    changes = np.concatenate(changes, axis=0)
-    threshold = np.percentile(changes, 100 * (1 - update_frac))
-    train_mask = {v: torch.abs(after[v] - before[v]) > threshold for v in before.keys()}
-    return train_mask
 
 def threshold_output(my_output):
     shape = my_output.shape
@@ -55,30 +49,12 @@ def threshold_output(my_output):
     my_output = torch.minimum(my_output, cut_positive_values)
     return my_output
 
-# def get_update_parameters(before, after, update_frac):
-#     changes = [np.reshape(np.abs(after[v].cpu().numpy() - before[v].cpu().numpy()), (-1,)) for v in before.keys()]
-#     changes = np.concatenate(changes, axis=0)
-#     threshold = np.percentile(changes, 100 * (1 - update_frac))
-#     update_params = {}
-#     for v in before.keys():
-#         abs_diff = torch.abs(after[v] - before[v])
-#         diff = after[v] - before[v]
-#         if len(diff.shape) == 4:
-#             a, b, c, d = torch.where(abs_diff > threshold)
-#             a = a.cpu().detach().numpy().tolist()
-#             b = b.cpu().detach().numpy().tolist()
-#             c = c.cpu().detach().numpy().tolist()
-#             d = d.cpu().detach().numpy().tolist()
-#             coords = list(zip(a, b, c, d))
-#             actual_values = diff[a, b, c, d].cpu().detach().numpy().tolist()
-#             ret = list(zip(actual_values, coords))
-#             update_params[v] = ret
-#         elif len(diff.shape) == 1:
-#             coords = torch.where(abs_diff > threshold)[0].cpu().detach().numpy().tolist()
-#             actual_values = diff[coords].cpu().detach().numpy().tolist()
-#             ret = list(zip(actual_values, coords))
-#             update_params[v] = ret
-#     return update_params
+def find_train_mask(before, after, update_frac):
+    changes = [np.reshape(np.abs(after[v].cpu().numpy() - before[v].cpu().numpy()), (-1,)) for v in before.keys()]
+    changes = np.concatenate(changes, axis=0)
+    threshold = np.percentile(changes, 100 * (1 - update_frac))
+    train_mask = {v: torch.abs(after[v] - before[v]) > threshold for v in before.keys()}
+    return train_mask
 
 def get_update_parameters(before, after, update_frac):
     changes = [np.reshape(np.abs(after[v].cpu().numpy() - before[v].cpu().numpy()), (-1,)) for v in before.keys()]
@@ -102,6 +78,11 @@ def get_update_parameters(before, after, update_frac):
             actual_values = diff[coords.tolist()].cpu().detach().numpy().tolist()
             update_params[v] = (actual_values, coords)
     return update_params
+
+def find_histogram(before, after, segment):
+    changes = [np.reshape(np.abs(after[v].cpu().numpy() - before[v].cpu().numpy()), (-1,)) for v in before.keys()]
+    changes = np.concatenate(changes, axis=0)
+    pass
 
 def crop_frame(original_frame, original_label, scale=4):
     oheight = original_frame.shape[-2]

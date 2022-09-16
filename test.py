@@ -28,20 +28,21 @@ def test():
     criterion = nn.MSELoss() if not cfg.L1_loss else nn.L1Loss()
     psnr_calculate = PeakSignalNoiseRatio(data_range=1.0).to(device)
     ssim_calculate = StructuralSimilarityIndexMeasure(data_range=1.0).to(device)
-
     for saved_file in cfg.saved_file_list:
+        print(saved_file)
         video_basename = os.path.basename(saved_file).split('_')
         video_basename = video_basename[0] + '_' + video_basename[1]
         lr_video = cfg.lr_path + video_basename + '_crf' + str(cfg.crf) + '.mp4'
         hr_video = cfg.hr_path + video_basename + '.yuv'
 
         ######### In order to exclude some files from the testing process, insert their basename here #########
-        if video_basename not in ['vimeo_166010169']:
+        if video_basename in []:
             continue
         ######### In order to exclude some files from the testing process, insert their basename here #########
     
         # Open log file for record
-        log = open("%slog_%s_crf%d_F%d_seg%d.txt" % (cfg.log_path, video_basename, cfg.crf, cfg.F, cfg.segment_length), 'w')
+        log = open("%slog_%s_crf%d_F%d_seg%d_frac%.2f_epoch%d_batch%d.txt" % \
+            (cfg.log_path, video_basename, cfg.crf, cfg.F, cfg.segment_length, cfg.update_frac, cfg.epoch, cfg.batch_size), 'w')
 
         lr_cap = cv2.VideoCapture(lr_video)
         hr_cap = VideoCaptureYUV(hr_video, cfg.hr_size)
@@ -73,13 +74,6 @@ def test():
             if segment == cfg.segment_skip or cfg.update_frac == 1:
                 sr_model.load_state_dict(saved_parameters[segment])
             else:
-                # p = sr_model.state_dict()
-                # p = OrderedDict({v: p[v].clone() for v in p.keys()})
-                # segment_param = saved_parameters[segment]
-                # for key in segment_param.keys():
-                #     for item in segment_param[key]:
-                #         p[key][item[-1]] += item[0]
-                # sr_model.load_state_dict(p)
                 p = sr_model.state_dict()
                 p = OrderedDict({v: p[v].clone() for v in p.keys()})
                 segment_param = saved_parameters[segment]
@@ -101,7 +95,7 @@ def test():
             cnt = 0
             for v in delta.keys():
                 cnt += torch.count_nonzero(delta[v])
-            print("segment: %d, cnt: %d" % (segment, cnt))
+            print("segment: %d, cnt: %d" % (segment + 1, cnt))
 
             # Actual inference on full frame
             srvc_dataset = SRVC_DataSet(input_frames, output_frames)
@@ -120,12 +114,6 @@ def test():
                 bicubic_output_frame = bicubic_upsampler(input_frame).to(torch.float32)
                 bicubic_psnr = psnr_calculate(bicubic_output_frame, output_frame).cpu().detach().numpy()
                 bicubic_ssim = ssim_calculate(bicubic_output_frame, output_frame).cpu().detach().numpy()
-
-                if segment == 9 and i == 5:
-                    torch.save((input_frame * 255), "./inputframe.pt")
-                    torch.save((output_frame * 255), "./outputframe.pt")
-                    torch.save((my_output_frame * 255), "./myoutputframe.pt")
-                    torch.save((bicubic_output_frame * 255), "./bicubicoutputframe.pt")
 
                 total_time += (t1 - t0)
                 if psnr != -np.inf and psnr != np.inf:    
