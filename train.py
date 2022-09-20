@@ -2,6 +2,7 @@ from utils.video_reader import *
 from utils.functions import *
 from utils.dataset import *
 from model.sr_model import *
+from model.edsr_model import *
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -16,12 +17,21 @@ def train():
 
     # Get all configurations and set up model
     cfg = get_configs()
-    sr_model = nn.DataParallel(SR_Model(cfg.F, cfg.scale, cfg.patch_size))
-    sr_model.to(device)
-    sr_model.train()
+    if cfg.model == 'srvc':
+        model = nn.DataParallel(SR_Model(cfg.F, cfg.scale, cfg.patch_size))
+    else:
+        edsr_args = {'n_resblocks': cfg.edsr_args.n_resblocks,
+                    'n_feats': cfg.edsr_args.n_feats,
+                    'scale': cfg.edsr_args.scale,
+                    'rgb_range': cfg.edsr_args.rgb_range,
+                    'n_colors': cfg.edsr_args.n_colors,
+                    'res_scale': cfg.edsr_args.res_scale}
+        model = nn.DataParallel(EDSR_Model(edsr_args))
+    model.to(device)
+    model.train()
 
     # Declare optimizer and loss function
-    optimizer = torch.optim.Adam(sr_model.parameters(), lr=cfg.lr, betas=(cfg.beta1, cfg.beta2))
+    optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr, betas=(cfg.beta1, cfg.beta2))
     criterion = nn.MSELoss() if not cfg.L1_loss else nn.L1Loss()
     psnr_calculate = PeakSignalNoiseRatio(data_range=1.0).to(device)
 
@@ -56,7 +66,7 @@ def train():
                 continue
             # Save initial model parameters before update
             if segment > cfg.segment_skip:
-                before = sr_model.state_dict()
+                before = model.state_dict()
                 before = OrderedDict({v: before[v].clone() for v in before.keys()})
             else:
                 before = None
@@ -71,7 +81,7 @@ def train():
                 input_frame = input_frame.to(torch.float32).to(device) / 255
                 output_frame = output_frame.to(torch.float32).to(device) / 255
                 optimizer.zero_grad()
-                my_output_frame = sr_model(input_frame).to(torch.float32)
+                my_output_frame = model(input_frame).to(torch.float32)
                 loss = criterion(my_output_frame, output_frame)
                 psnr = psnr_calculate(my_output_frame, output_frame)
                 print("First iteration - Segment: %d/%d, Frame: %d/%d, L2Loss: %f, PSNR: %f" \
@@ -92,30 +102,30 @@ def train():
                         input_frame = input_frame.to(torch.float32).to(device) / 255
                         output_frame = output_frame.to(torch.float32).to(device) / 255
                         optimizer.zero_grad()
-                        my_output_frame = sr_model(input_frame).to(torch.float32)
+                        my_output_frame = model(input_frame).to(torch.float32)
                         loss = criterion(my_output_frame, output_frame)
                         psnr = psnr_calculate(my_output_frame, output_frame)
                         print("Epoch: %d/%d, Video: %s, Segment: %d/%d, Frame: %d/%d, L2Loss: %f, PSNR: %f" \
                             % (epoch + 2, cfg.epoch, video_basename, segment + 1, cfg.segment_num, i + 1, len(srvc_dataloader), loss.cpu().detach().numpy(), psnr)) 
                         loss.backward()
                         optimizer.step()
-                temp = sr_model.state_dict()
+                temp = model.state_dict()
                 ord[segment] = OrderedDict({v: temp[v].clone() for v in temp.keys()})
             else:
-                after = sr_model.state_dict()
+                after = model.state_dict()
                 after = OrderedDict({v: after[v].clone() for v in after.keys()})
                 train_mask = find_train_mask(before, after, cfg.update_frac)
                 delta = OrderedDict({v: (after[v] - before[v]) for v in after.keys()})
                 masked_delta = OrderedDict({v: delta[v] * train_mask[v] for v in delta.keys()})
                 updated_params = OrderedDict({v: before[v] + masked_delta[v] for v in before.keys()})
-                sr_model.load_state_dict(updated_params)
+                model.load_state_dict(updated_params)
 
                 for epoch in range(cfg.epoch - 1):
                     srvc_dataset = SRVC_DataSet(input_frames, output_frames)
                     srvc_dataloader = DataLoader(srvc_dataset, batch_size=cfg.batch_size, shuffle=False)
 
                     # Parameters before current training iteration
-                    prev = sr_model.state_dict()
+                    prev = model.state_dict()
                     prev = OrderedDict({v: prev[v].clone() for v in prev.keys()})
 
                     for i, (input_frame, output_frame) in enumerate(srvc_dataloader):
@@ -124,7 +134,7 @@ def train():
                         input_frame = input_frame.to(torch.float32).to(device) / 255
                         output_frame = output_frame.to(torch.float32).to(device) / 255
                         optimizer.zero_grad()
-                        my_output_frame = sr_model(input_frame).to(torch.float32)
+                        my_output_frame = model(input_frame).to(torch.float32)
                         loss = criterion(my_output_frame, output_frame)
                         psnr = psnr_calculate(my_output_frame, output_frame)
                         print("Epoch: %d/%d, Video: %s, Segment: %d/%d, Frame: %d/%d, L2Loss: %f, PSNR: %f" \
@@ -133,21 +143,21 @@ def train():
                         optimizer.step()
 
                     # Parameters after current training iteration
-                    next = sr_model.state_dict()
+                    next = model.state_dict()
                     next = OrderedDict({v: next[v].clone() for v in next.keys()})
 
                     # Calculate delta and masked_delta, and update the model parameters
                     delta = OrderedDict({v: (next[v] - prev[v]) for v in next.keys()})
                     masked_delta = OrderedDict({v: delta[v] * train_mask[v] for v in delta.keys()})
                     updated_params = OrderedDict({v: prev[v] + masked_delta[v] for v in prev.keys()})
-                    sr_model.load_state_dict(updated_params)
+                    model.load_state_dict(updated_params)
 
-                final = sr_model.state_dict()
+                final = model.state_dict()
                 final = OrderedDict({v: final[v].clone() for v in final.keys()})
                 delta = OrderedDict({v: (final[v] - before[v]) for v in before.keys()})
                 masked_delta = OrderedDict({v: delta[v] * train_mask[v] for v in delta.keys()})
                 updated_params = OrderedDict({v: before[v] + masked_delta[v] for v in before.keys()})
-                sr_model.load_state_dict(updated_params)
+                model.load_state_dict(updated_params)
                 compressed = get_update_parameters(before, final, cfg.update_frac)
                 ord[segment] = compressed
                 cnt = 0
@@ -155,8 +165,8 @@ def train():
                     cnt += len(compressed[v][0])
                 print("Segment: %d/%d, updated fraction of parameters: %.2f, updated number of parameters: %d" % (segment + 1, cfg.segment_num, cfg.update_frac, cnt))
 
-        torch.save(ord, "%s%s_crf%d_F%d_seg%d_frac%.2f_epoch%d_batch%d.pth" % \
-            (cfg.save_path, video_basename, cfg.crf, cfg.F, cfg.segment_length, cfg.update_frac, cfg.epoch, cfg.batch_size))
+        torch.save(ord, "%s%s_%s_crf%d_F%d_seg%d_frac%.2f_epoch%d_batch%d.pth" % \
+            (cfg.save_path, cfg.model, video_basename, cfg.crf, cfg.F, cfg.segment_length, cfg.update_frac, cfg.epoch, cfg.batch_size))
         print("Saved the SRVC model for %s video file" % (video_basename))
         lr_cap.release()
         hr_cap.release()

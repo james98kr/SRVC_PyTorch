@@ -2,6 +2,7 @@ from utils.video_reader import *
 from utils.functions import *
 from utils.dataset import *
 from model.sr_model import *
+from model.edsr_model import *
 import numpy as np
 import torch
 import torch.nn as nn
@@ -17,9 +18,18 @@ def test():
 
     # Get all configurations and set up model
     cfg = get_configs()
-    sr_model = nn.DataParallel(SR_Model(cfg.F, cfg.scale, cfg.patch_size))
-    sr_model.to(device)
-    sr_model.eval()
+    if cfg.model == 'srvc':
+        model = nn.DataParallel(SR_Model(cfg.F, cfg.scale, cfg.patch_size))
+    else:
+        edsr_args = {'n_resblocks': cfg.edsr_args.n_resblocks,
+            'n_feats': cfg.edsr_args.n_feats,
+            'scale': cfg.edsr_args.scale,
+            'rgb_range': cfg.edsr_args.rgb_range,
+            'n_colors': cfg.edsr_args.n_colors,
+            'res_scale': cfg.edsr_args.res_scale}
+        model = nn.DataParallel(EDSR_Model(edsr_args))
+    model.to(device)
+    model.eval()
 
     # Bicubic upsampler for comparison
     bicubic_upsampler = nn.Upsample(scale_factor=cfg.scale, mode='bicubic').to(device)
@@ -31,7 +41,7 @@ def test():
     for saved_file in cfg.saved_file_list:
         print(saved_file)
         video_basename = os.path.basename(saved_file).split('_')
-        video_basename = video_basename[0] + '_' + video_basename[1]
+        video_basename = video_basename[1] + '_' + video_basename[2]
         lr_video = cfg.lr_path + video_basename + '_crf' + str(cfg.crf) + '.mp4'
         hr_video = cfg.hr_path + video_basename + '.yuv'
 
@@ -41,8 +51,8 @@ def test():
         ######### In order to exclude some files from the testing process, insert their basename here #########
     
         # Open log file for record
-        log = open("%slog_%s_crf%d_F%d_seg%d_frac%.2f_epoch%d_batch%d.txt" % \
-            (cfg.log_path, video_basename, cfg.crf, cfg.F, cfg.segment_length, cfg.update_frac, cfg.epoch, cfg.batch_size), 'w')
+        log = open("%slog_%s_%s_crf%d_F%d_seg%d_frac%.2f_epoch%d_batch%d.txt" % \
+            (cfg.log_path, cfg.model, video_basename, cfg.crf, cfg.F, cfg.segment_length, cfg.update_frac, cfg.epoch, cfg.batch_size), 'w')
 
         lr_cap = cv2.VideoCapture(lr_video)
         hr_cap = VideoCaptureYUV(hr_video, cfg.hr_size)
@@ -56,7 +66,7 @@ def test():
         total_frames = 0
     
         for segment in range(cfg.segment_num):
-            before = sr_model.state_dict()
+            before = model.state_dict()
             before = {v: before[v].clone() for v in before.keys()}
             # Load input and output frames for current segment
             try: 
@@ -72,9 +82,9 @@ def test():
                 continue
             # Load saved parameters appropriately
             if segment == cfg.segment_skip or cfg.update_frac == 1:
-                sr_model.load_state_dict(saved_parameters[segment])
+                model.load_state_dict(saved_parameters[segment])
             else:
-                p = sr_model.state_dict()
+                p = model.state_dict()
                 p = OrderedDict({v: p[v].clone() for v in p.keys()})
                 segment_param = saved_parameters[segment]
                 for key in segment_param.keys():
@@ -86,10 +96,10 @@ def test():
                     else:
                         for i in range(len(actual)):
                             p[key][int(coords[i])] += actual[i]
-                sr_model.load_state_dict(p)
+                model.load_state_dict(p)
 
             # For checking how many parameters are actually updated
-            after = sr_model.state_dict()
+            after = model.state_dict()
             after = {v: after[v].clone() for v in after.keys()}
             delta = {v: (after[v] - before[v]) for v in after.keys()}
             cnt = 0
@@ -104,7 +114,7 @@ def test():
                 input_frame = input_frame.to(torch.float32).to(device) / 255
                 output_frame = output_frame.to(torch.float32).to(device) / 255
                 t0 = time.time()
-                my_output_frame = sr_model(input_frame).to(torch.float32)
+                my_output_frame = model(input_frame).to(torch.float32)
                 t1 = time.time()
                 my_output_frame = threshold_output(my_output_frame).to(torch.float32)
                 loss = criterion(my_output_frame, output_frame).cpu().detach().numpy()

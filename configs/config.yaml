@@ -1,3 +1,4 @@
+model: srvc
 hr_path: /home/james/srvc/data/yuv_videos/                          # Change this!
 lr_path: /home/james/srvc/data/content_encoded_videos/              # Change this!
 original_path: /home/james/srvc/data/original_videos/               # Change this!
@@ -21,3 +22,11 @@ beta1: 0.9
 beta2: 0.999
 L1_loss: False
 update_frac: 0.01
+
+edsr_args:
+  n_resblocks: 16
+  n_feats: 64
+  scale: 4
+  rgb_range: 1
+  n_colors: 3
+  res_scale: 1

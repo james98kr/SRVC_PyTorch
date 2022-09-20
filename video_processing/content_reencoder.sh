@@ -14,8 +14,6 @@ do
     onlyname=${onlyname%.*}
     oheight=1080
     owidth=1920
-    height=1080
-    width=1920
     
     originalname=${original_dir}/${onlyname}*
     fps=$(ffprobe -v error -select_streams v -of default=noprint_wrappers=1:nokey=1 \
@@ -23,12 +21,13 @@ do
 
     for format in 265;
     do
-        for crf in 10 20 30 40 50;
+        # for crf in 10 20 30 40 50;
+        for crf in 30;
         do
             outputname=${output_dir}/${onlyname}_crf${crf}.mp4
             ffmpeg -y -f rawvideo -s ${owidth}x${oheight} -pix_fmt yuv420p -framerate ${fps} \
-                -i ${file} -vf scale=${width}:${height}:out_color_matrix=bt709 -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range 1 \
-                -sws_flags area -vcodec libx${format} -preset slow \
+                -i ${file} \
+                -vcodec libx${format} -preset slow \
                 -vsync 0 -pix_fmt yuv420p \
                 -crf ${crf} -an ${outputname}
         done

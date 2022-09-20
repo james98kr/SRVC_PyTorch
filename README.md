@@ -50,7 +50,7 @@ Make sure to check the ``./configs/config.yaml`` file before training. The ``crf
 
 For each video that you train, there will be one ``.pth`` file that will be saved in the ``./save`` directory as the model stream for that video. It will be saved as follows:
 ```
-./save/{video_name}_crf{crf_value}_F{F_value}_seg{segment_length}_frac{update_frac}_epoch{epoch}_batch{batch_size}.pth
+./save/{model_name}_{video_name}_crf{crf_value}_F{F_value}_seg{segment_length}_frac{update_frac}_epoch{epoch}_batch{batch_size}.pth
 ```
 
 ## Inference
@@ -64,8 +64,13 @@ python test.py ./configs/config.yaml
 ```
 For every video the model tests, there will be one ``.txt`` file created in the ``./log`` directory. You can check out the results of the test in the file.
 ```
-./logs/log_{video_name}_crf{crf_value}_F{F_value}_seg{segment_length}_frac{update_frac}_epoch{epoch}_batch{batch_size}.txt
+./logs/log_{model_name}_{video_name}_crf{crf_value}_F{F_value}_seg{segment_length}_frac{update_frac}_epoch{epoch}_batch{batch_size}.txt
 ```
+
+## Comparison with EDSR
+For direct comparison with other deep learning based super-resolution models, I have included the code for the EDSR model (Lim et al., 2017). You can find the original PyTorch implementation [**here**](https://github.com/sanghyun-son/EDSR-PyTorch). 
+
+In order to train and test the EDSR model, you can simply change the first line of ``./configs/config.yaml`` file from ``"srvc"`` to ``"edsr"``. Also, at the end of the configuration file, you can set the hyperparameters of the EDSR model such as the number of residual blocks, upsampling scale, etc. 
 
 ## References
 Code is built based on the SRVC model described in the original [**SRVC paper**](https://arxiv.org/abs/2104.02322), and some of the code is borrowed from the official [**GitHub repo**](https://github.com/AdaptiveVC/SRVC) of SRVC. 

@@ -88,13 +88,13 @@ class Upsampler(nn.Sequential):
 
         super(Upsampler, self).__init__(*m)
 
-class EDSR(nn.Module):
+class EDSR_Model(nn.Module):
     def __init__(self, args, conv=default_conv):
-        super(EDSR, self).__init__()
+        super(EDSR_Model, self).__init__()
         n_resblocks = args['n_resblocks']
         n_feats = args['n_feats']
         kernel_size = 3 
-        scale = args['scale'][0]
+        scale = args['scale']
         act = nn.ReLU(True)
         self.sub_mean = MeanShift(args['rgb_range'])
         self.add_mean = MeanShift(args['rgb_range'], sign=1)

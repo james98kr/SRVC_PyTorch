@@ -32,7 +32,7 @@ def get_configs():
     cfg = Munch.fromDict(yaml.safe_load(cfg_txt))
     cfg.lr_video_list = sorted(glob(cfg.lr_path + '*crf' + str(cfg.crf) + '*'))
     cfg.hr_video_list = sorted(glob(cfg.hr_path + '*'))[:len(cfg.lr_video_list)]
-    cfg.saved_file_list = sorted(glob(cfg.save_path + '*' + str(cfg.crf) + '*' + str(cfg.F) + '*' + \
+    cfg.saved_file_list = sorted(glob(cfg.save_path + '*' + cfg.model + '*' + str(cfg.crf) + '*' + str(cfg.F) + '*' + \
         str(cfg.segment_length) + '*epoch' + str(cfg.epoch) + '*batch' + str(cfg.batch_size) + '*'))
     cfg.hr_size = parse_size(cfg.hr_size)
     cfg.lr_size = parse_size(cfg.lr_size)
